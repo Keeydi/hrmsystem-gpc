@@ -12,6 +12,7 @@ import {
   Plus,
   Trash2,
   Calendar,
+  Building2,
 } from "lucide-react";
 import DashboardLayoutNew from "@/components/Layout/DashboardLayoutNew";
 import {
@@ -69,7 +70,8 @@ const Dashboard = () => {
     navigate("/documents", { state: { openDialog: key } });
   };
   const handleOrganizationShortcut = (key: { name: string }) => {
-    navigate("/departments", { state: { openDialog: key } });
+    // Navigate to the Organization section (Department tab by default)
+    navigate("/organization/department", { state: { openDialog: key } });
   };
 
   const calendarDays = Array.from({ length: 35 }, (_, i) =>
@@ -579,11 +581,11 @@ const Dashboard = () => {
 
             <Card
               className="hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => handleOrganizationShortcut({ name: "HR" })}
+              onClick={() => handleOrganizationShortcut({ name: "department" })}
             >
               <CardContent className="pt-6">
                 <div className="flex flex-col items-center text-center space-y-2">
-                  <FileText className="w-8 h-8 text-primary" />
+                  <Building2 className="w-8 h-8 text-primary" />
                   <CardTitle className="text-lg">Organization</CardTitle>
                   <Button variant="link" className="text-primary">
                     View Details

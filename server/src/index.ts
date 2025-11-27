@@ -107,6 +107,7 @@ import documentRoutes from "./routes/documents";
 import notificationRoutes from "./routes/notifications";
 import attendanceRoutes from "./routes/attendance";
 import settingsRoutes from "./routes/settings";
+import { autoMarkAbsentForToday } from "./utils/attendanceAutoAbsent";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -187,4 +188,37 @@ app.use((req, res) => {
 
 app.listen(PORT, () => {
   console.log(`HR Hub API listening on port ${PORT}`);
+
+  // Simple scheduler: every 5 minutes check if it's past 4:00 PM
+  // and auto-mark employees as absent for today if they have no attendance.
+  // To avoid duplicate work, only run once per day.
+  let lastAutoAbsentDate: string | null = null;
+
+  const runAutoAbsentIfNeeded = async () => {
+    const today = new Date().toISOString().split("T")[0];
+    if (lastAutoAbsentDate === today) {
+      return;
+    }
+
+    await autoMarkAbsentForToday();
+
+    // If we successfully get here and it's already past 4 PM,
+    // mark as done for today to avoid re-running.
+    const now = new Date();
+    if (now.getHours() >= 16) {
+      lastAutoAbsentDate = today;
+    }
+  };
+
+  // Run once on startup (in case server starts after 4 PM)
+  runAutoAbsentIfNeeded().catch((err) =>
+    console.error("Initial auto-absent check failed:", err)
+  );
+
+  // Then check every 5 minutes
+  setInterval(() => {
+    runAutoAbsentIfNeeded().catch((err) =>
+      console.error("Scheduled auto-absent check failed:", err)
+    );
+  }, 5 * 60 * 1000);
 });

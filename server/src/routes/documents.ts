@@ -328,6 +328,99 @@ router.put('/:id', upload.single('file'), async (req, res) => {
   }
 });
 
+// GET /documents/file/:employeeId/:type - Serve employee document file (handles base64 or file path)
+router.get('/file/:employeeId/:type', async (req, res) => {
+  try {
+    const { employeeId, type } = req.params;
+    
+    let fileData: string | null = null;
+    let contentType = 'application/pdf';
+    
+    // For COE, check documents table first
+    if (type === 'coe') {
+      const [docRows] = await pool.execute<any[]>(
+        'SELECT file_url, file_path FROM documents WHERE employee_id = ? AND document_type = ? ORDER BY created_at DESC LIMIT 1',
+        [employeeId, 'coe']
+      );
+      
+      if (docRows.length > 0) {
+        const doc = docRows[0];
+        fileData = doc.file_url || doc.file_path;
+      }
+    } else {
+      // For PDS and SR, check employees table
+      const [empRows] = await pool.execute<any[]>(
+        'SELECT pds_file, service_record_file, registered_face_file FROM employees WHERE employee_id = ?',
+        [employeeId]
+      );
+      
+      if (empRows.length === 0) {
+        return res.status(404).json({ message: 'Employee not found' });
+      }
+      
+      const employee = empRows[0];
+      
+      // Get the appropriate file based on type
+      if (type === 'pds') {
+        fileData = employee.pds_file;
+      } else if (type === 'sr') {
+        fileData = employee.service_record_file;
+      } else if (type === 'face') {
+        fileData = employee.registered_face_file;
+        contentType = 'image/png';
+      } else {
+        return res.status(400).json({ message: 'Invalid document type' });
+      }
+    }
+    
+    if (!fileData) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+    
+    // If it's a base64 string, decode and serve it
+    if (fileData.startsWith('data:')) {
+      const base64Match = fileData.match(/^data:([^;]+);base64,(.+)$/);
+      if (base64Match) {
+        const mimeType = base64Match[1];
+        const base64Data = base64Match[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Set headers to allow embedding and prevent CSP issues
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${type}_${employeeId}"`);
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        return res.send(buffer);
+      }
+    }
+    
+    // If it's a file path, try to serve it
+    if (fileData.startsWith('/uploads/') || !fileData.includes('/')) {
+      const filename = fileData.replace('/uploads/', '');
+      const filePath = path.join(__dirname, '../uploads/', filename);
+      
+      if (fs.existsSync(filePath)) {
+        // Set headers to allow embedding
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        return res.sendFile(filePath);
+      }
+    }
+    
+    // If file_path is an absolute path, try to serve it directly
+    if (fileData && fs.existsSync(fileData)) {
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+      return res.sendFile(path.resolve(fileData));
+    }
+    
+    return res.status(404).json({ message: 'File not found' });
+  } catch (error) {
+    console.error('Error serving document file', error);
+    return res.status(500).json({ message: 'Error serving file' });
+  }
+});
+
 // DELETE document
 router.delete('/:id', async (req, res) => {
   try {

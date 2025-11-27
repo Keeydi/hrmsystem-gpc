@@ -113,6 +113,13 @@ const Documents = () => {
     type: "pds" | "sr" | "coe" | "contract";
     currentUrl: string | null;
   } | null>(null);
+  const [showViewDocDialog, setShowViewDocDialog] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<{
+    url: string;
+    title: string;
+    type: "pds" | "sr" | "coe";
+    isBase64?: boolean;
+  } | null>(null);
   const [editDocFile, setEditDocFile] = useState<File | null>(null);
   const [folderDocuments, setFolderDocuments] = useState<any[]>([]);
   const [folderSearchTerm, setFolderSearchTerm] = useState("");
@@ -159,9 +166,11 @@ const Documents = () => {
             id: emp.employeeId,
             name: emp.fullName || "",
             employeeId: emp.employeeId,
-            pds: emp.pdsFile ? `/uploads/${emp.pdsFile}` : null,
+            pds: emp.pdsFile 
+              ? (emp.pdsFile.startsWith('data:') ? emp.pdsFile : `/uploads/${emp.pdsFile}`)
+              : null,
             sr: emp.serviceRecordFile
-              ? `/uploads/${emp.serviceRecordFile}`
+              ? (emp.serviceRecordFile.startsWith('data:') ? emp.serviceRecordFile : `/uploads/${emp.serviceRecordFile}`)
               : null,
             coe: null,
             date: emp.createdAt || new Date().toISOString(),
@@ -169,10 +178,14 @@ const Documents = () => {
         } else if (emp.employeeId) {
           const empDoc = employeeDocs.get(emp.employeeId)!;
           if (emp.pdsFile && !empDoc.pds) {
-            empDoc.pds = `/uploads/${emp.pdsFile}`;
+            empDoc.pds = emp.pdsFile.startsWith('data:') 
+              ? emp.pdsFile 
+              : `/uploads/${emp.pdsFile}`;
           }
           if (emp.serviceRecordFile && !empDoc.sr) {
-            empDoc.sr = `/uploads/${emp.serviceRecordFile}`;
+            empDoc.sr = emp.serviceRecordFile.startsWith('data:')
+              ? emp.serviceRecordFile
+              : `/uploads/${emp.serviceRecordFile}`;
           }
         }
       });
@@ -648,14 +661,31 @@ const Documents = () => {
                         <td className="py-3 px-4">
                           {doc.pds ? (
                             <div className="flex items-center gap-2">
-                              <a
-                                href={`${API_BASE_URL}${doc.pds}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 underline"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  const isBase64 = doc.pds?.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    // Base64 file - use it directly
+                                    fileUrl = doc.pds;
+                                  } else {
+                                    // File path - use backend route to serve it
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Personal Data Sheet - ${doc.employeeId}`,
+                                    type: "pds",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
                               >
                                 View
-                              </a>
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -695,14 +725,31 @@ const Documents = () => {
                         <td className="py-3 px-4">
                           {doc.sr ? (
                             <div className="flex items-center gap-2">
-                              <a
-                                href={`${API_BASE_URL}${doc.sr}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 underline"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  const isBase64 = doc.sr?.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    // Base64 file - use it directly
+                                    fileUrl = doc.sr;
+                                  } else {
+                                    // File path - use backend route to serve it
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Service Record - ${doc.employeeId}`,
+                                    type: "sr",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
                               >
                                 View
-                              </a>
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -741,14 +788,33 @@ const Documents = () => {
                         <td className="py-3 px-4">
                           {doc.coe ? (
                             <div className="flex items-center gap-2">
-                              <a
-                                href={`${API_BASE_URL}${doc.coe}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 underline"
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  const isBase64 = doc.coe?.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    // Base64 file - use it directly
+                                    fileUrl = doc.coe;
+                                  } else {
+                                    // File path - use backend route to serve it
+                                    fileUrl = doc.coe.startsWith('/') 
+                                      ? `${API_BASE_URL}${doc.coe}`
+                                      : `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Certificate of Employment - ${doc.employeeId}`,
+                                    type: "coe",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
                               >
                                 View
-                              </a>
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -975,15 +1041,39 @@ const Documents = () => {
               <div className="space-y-4">
                 {editingDoc.currentUrl && (
                   <div className="flex items-center gap-2">
-                    <a
-                      href={`${API_BASE_URL}${editingDoc.currentUrl}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-blue-600 hover:underline"
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      onClick={() => {
+                        if (editingDoc.currentUrl?.startsWith('data:')) {
+                          // Base64 file - use backend route to download
+                          const fileUrl = `${API_BASE_URL}/documents/file/${editingDoc.employeeId}/${editingDoc.type}`;
+                          const link = document.createElement('a');
+                          link.href = fileUrl;
+                          link.download = `${editingDoc.type}_${editingDoc.employeeId}.pdf`;
+                          link.target = '_blank';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        } else {
+                          // File path - download from server
+                          const fileUrl = editingDoc.currentUrl.startsWith('/')
+                            ? `${API_BASE_URL}${editingDoc.currentUrl}`
+                            : `${API_BASE_URL}/uploads/${editingDoc.currentUrl}`;
+                          const link = document.createElement('a');
+                          link.href = fileUrl;
+                          link.download = `${editingDoc.type}_${editingDoc.employeeId}.pdf`;
+                          link.target = '_blank';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }
+                      }}
                     >
                       <Download className="h-4 w-4" />
                       Download Current Document
-                    </a>
+                    </Button>
                   </div>
                 )}
                 <div className="space-y-2">
@@ -1074,6 +1164,79 @@ const Documents = () => {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* View Document Dialog */}
+        <Dialog open={showViewDocDialog} onOpenChange={setShowViewDocDialog}>
+          <DialogContent className="max-w-6xl max-h-[90vh] w-full">
+            <DialogHeader>
+              <DialogTitle>{viewingDoc?.title || "View Document"}</DialogTitle>
+              <DialogDescription>
+                View the document in the viewer below
+              </DialogDescription>
+            </DialogHeader>
+            {viewingDoc && (
+              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100">
+                {viewingDoc.isBase64 ? (
+                  // Base64 file - embed directly to avoid CSP issues
+                  <object
+                    data={viewingDoc.url}
+                    type="application/pdf"
+                    className="w-full h-full"
+                    aria-label={viewingDoc.title}
+                  >
+                    <div className="flex items-center justify-center h-full">
+                      <p className="text-muted-foreground">
+                        PDF viewer not supported.{" "}
+                        <a
+                          href={viewingDoc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline"
+                        >
+                          Open in new tab
+                        </a>
+                      </p>
+                    </div>
+                  </object>
+                ) : (
+                  // Server file - use iframe
+                  <iframe
+                    src={viewingDoc.url}
+                    className="w-full h-full border-0"
+                    title={viewingDoc.title}
+                  />
+                )}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowViewDocDialog(false);
+                  setViewingDoc(null);
+                }}
+              >
+                Close
+              </Button>
+              {viewingDoc && (
+                <Button
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = viewingDoc.url;
+                    link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </Button>
+              )}
+            </div>
           </DialogContent>
         </Dialog>
       </div>

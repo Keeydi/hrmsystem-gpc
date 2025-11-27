@@ -2009,7 +2009,7 @@ const Employees = () => {
                         <img
                           src={editForm.registeredFaceFile}
                           alt="Registered face"
-                          className="w-full max-w-md h-48 object-cover rounded-xl border-2 border-primary/20 shadow-md"
+                          className="w-full max-w-md h-64 object-contain rounded-xl border-2 border-primary/20 shadow-md bg-muted/30"
                         />
                         <p className="text-xs text-green-600 font-medium">
                           ✓ Face registered
@@ -2021,17 +2021,6 @@ const Employees = () => {
                         <p>No face capture on file</p>
                       </div>
                     )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full max-w-md"
-                      onClick={() => openFaceCamera("edit")}
-                    >
-                      <Camera className="w-4 h-4 mr-2" />
-                      {editForm.registeredFaceFile
-                        ? "Retake Photo"
-                        : "Open Camera"}
-                    </Button>
                   </div>
                 </EditField>
                 <EditField label="Status">

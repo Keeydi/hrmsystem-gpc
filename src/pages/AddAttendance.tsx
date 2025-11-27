@@ -201,6 +201,33 @@ const AddAttendance = () => {
     }
 
     try {
+      // Format time to HH:MM (24-hour format) if provided
+      const formatTime = (time: string) => {
+        if (!time) return null;
+        // If time is already in HH:MM format, return it
+        if (/^\d{2}:\d{2}$/.test(time)) {
+          return time;
+        }
+        // If it's in HH:MM:SS format, remove seconds
+        if (/^\d{2}:\d{2}:\d{2}$/.test(time)) {
+          return time.substring(0, 5);
+        }
+        return null;
+      };
+
+      const formattedCheckIn = formatTime(checkIn);
+      const formattedCheckOut = formatTime(checkOut);
+
+      // Ensure date is in YYYY-MM-DD format
+      let formattedDate = date;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) {
+          throw new Error("Invalid date format");
+        }
+        formattedDate = dateObj.toISOString().split('T')[0];
+      }
+
       const response = await fetch(`${API_BASE_URL}/attendance`, {
         method: 'POST',
         headers: {
@@ -209,17 +236,13 @@ const AddAttendance = () => {
         body: JSON.stringify({
           employeeId: employeeId.trim(),
           employeeName: employeeName.trim(),
-          date,
-          checkIn: checkIn || null,
-          checkOut: checkOut || null,
+          date: formattedDate,
+          checkIn: formattedCheckIn,
+          checkOut: formattedCheckOut,
           status: finalStatus,
           notes: notes || null,
           checkInImage: capturedImages.checkIn || null,
           checkOutImage: capturedImages.checkOut || null,
-          location: location ? {
-            latitude: location.latitude,
-            longitude: location.longitude,
-          } : null,
         }),
       });
 

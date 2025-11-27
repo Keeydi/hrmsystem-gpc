@@ -313,6 +313,9 @@ router.post("/", async (req, res) => {
         [employeeId, email, employeeId]
       );
 
+      // Always create/update user account with 'employee' role when adding employee
+      const userRole = "employee"; // Employees added through this form are always 'employee' role
+      
       if (existingUsers.length > 0) {
         // Update existing user
         await connection.execute(
@@ -323,13 +326,13 @@ router.post("/", async (req, res) => {
             email,
             employeeId,
             normalizedFullName,
-            normalizeRole(role),
+            userRole,
             hashedPassword,
             existingUsers[0].id,
           ]
         );
       } else {
-        // Create new user
+        // Create new user account for the employee
         await connection.execute(
           `INSERT INTO users (username, email, employee_id, full_name, role, password_hash)
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -338,7 +341,7 @@ router.post("/", async (req, res) => {
             email,
             employeeId,
             normalizedFullName,
-            normalizeRole(role),
+            userRole,
             hashedPassword,
           ]
         );
@@ -363,10 +366,10 @@ router.post("/", async (req, res) => {
       resourceType: "Employee",
       resourceId: insertId ? String(insertId) : undefined,
       resourceName: normalizedFullName,
-      description: `Employee ${normalizedFullName} (${employeeId}) was created`,
+      description: `Employee ${normalizedFullName} (${employeeId}) was created and employee account was automatically created`,
       ipAddress: getClientIp(req),
       status: "success",
-      metadata: { employeeId, department, position },
+      metadata: { employeeId, department, position, userAccountCreated: true },
     });
 
     return res.status(201).json({ message: "Employee added successfully" });
@@ -583,7 +586,11 @@ router.put("/:id", async (req, res) => {
         return res.status(404).json({ message: "Employee not found" });
       }
 
-      if (updatedEmployee.password_hash) {
+      // Always update user account when updating employee
+      const userRole = "employee"; // Employees are always 'employee' role
+      const passwordToUse = hashedPassword || updatedEmployee.password_hash;
+      
+      if (passwordToUse) {
         await connection.execute(
           `INSERT INTO users (username, email, employee_id, full_name, role, password_hash)
            VALUES (?, ?, ?, ?, ?, ?)
@@ -592,14 +599,32 @@ router.put("/:id", async (req, res) => {
              employee_id = VALUES(employee_id),
              full_name = VALUES(full_name),
              role = VALUES(role),
-             password_hash = VALUES(password_hash)`,
+             password_hash = COALESCE(VALUES(password_hash), password_hash)`,
           [
             updatedEmployee.employee_id,
             updatedEmployee.email,
             updatedEmployee.employee_id,
             updatedEmployee.full_name,
-            normalizeRole(updatedEmployee.role),
-            updatedEmployee.password_hash,
+            userRole,
+            passwordToUse,
+          ]
+        );
+      } else {
+        // Update user account even if password is not being changed
+        await connection.execute(
+          `INSERT INTO users (username, email, employee_id, full_name, role)
+           VALUES (?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE
+             email = VALUES(email),
+             employee_id = VALUES(employee_id),
+             full_name = VALUES(full_name),
+             role = VALUES(role)`,
+          [
+            updatedEmployee.employee_id,
+            updatedEmployee.email,
+            updatedEmployee.employee_id,
+            updatedEmployee.full_name,
+            userRole,
           ]
         );
       }

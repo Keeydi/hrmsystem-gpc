@@ -427,6 +427,37 @@ const AttendanceList = () => {
 
     setIsSaving(true);
     try {
+      // Convert date to YYYY-MM-DD format
+      // Check if date is already in YYYY-MM-DD format
+      let formattedDate: string;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(editingRecord.date)) {
+        formattedDate = editingRecord.date;
+      } else {
+        const dateObj = new Date(editingRecord.date);
+        if (isNaN(dateObj.getTime())) {
+          throw new Error("Invalid date format");
+        }
+        formattedDate = dateObj.toISOString().split('T')[0];
+      }
+      
+      // Convert time format from HH:MM (24-hour) to ensure it's correct
+      // The time input already gives HH:MM format, but we need to ensure it's valid
+      const formatTime = (time: string) => {
+        if (!time) return null;
+        // If time is already in HH:MM format, return it
+        if (/^\d{2}:\d{2}$/.test(time)) {
+          return time;
+        }
+        // If it's in HH:MM:SS format, remove seconds
+        if (/^\d{2}:\d{2}:\d{2}$/.test(time)) {
+          return time.substring(0, 5);
+        }
+        return null;
+      };
+
+      const formattedCheckIn = formatTime(editCheckIn);
+      const formattedCheckOut = formatTime(editCheckOut);
+
       const response = await fetch(
         `${API_BASE_URL}/attendance/${editingRecord.record.attendanceId}`,
         {
@@ -435,9 +466,12 @@ const AttendanceList = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            employeeId: editingRecord.record.employeeId,
+            employeeName: editingRecord.record.name,
+            date: formattedDate,
             status: editStatus,
-            checkIn: editCheckIn || null,
-            checkOut: editCheckOut || null,
+            checkIn: formattedCheckIn,
+            checkOut: formattedCheckOut,
             notes: editNotes || null,
             updatedBy: user?.fullName || "Admin",
           }),

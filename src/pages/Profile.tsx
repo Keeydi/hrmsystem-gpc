@@ -411,6 +411,7 @@ const Profile = () => {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g., +63 912 345 6789"
                 />
               </div>
 
@@ -441,6 +442,7 @@ const Profile = () => {
                 id="address"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
+                placeholder="e.g., San Vicente, Palawan"
               />
             </div>
 
