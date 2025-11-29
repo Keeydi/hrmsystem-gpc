@@ -540,6 +540,19 @@ export function AdminSidebar() {
                   </SidebarMenuItem>
                 </Collapsible>
 
+                {/* Logout */}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    onClick={() => setLogoutDialogOpen(true)}
+                    className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  >
+                    <div className={iconClasses(false)}>
+                      <LogOut className="w-5 h-5 text-white" />
+                    </div>
+                    {!collapsed && <span>Logout</span>}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
               </SidebarMenu>
             </SidebarGroup>
           ) : (
