@@ -26,30 +26,63 @@ router.post("/login", async (req, res) => {
   const { identifier, password } = parseResult.data;
 
   try {
+    // Check if identifier looks like an Employee ID (format: YY-GPC-XXXXX)
+    const isEmployeeIdFormat = /^\d{2}-[A-Z]{2,4}-\d{1,5}$/.test(identifier);
+
     // First, try to select with password_reset_required column
     // If it fails, we'll catch and retry without it
     let rows: DbUser[];
     try {
-      [rows] = await pool.execute<DbUser[]>(
-        `SELECT id, username, email, employee_id, full_name, role, password_hash, password_reset_required
-         FROM users
-         WHERE username = ? OR email = ? OR employee_id = ?
-         LIMIT 1`,
-        [identifier, identifier, identifier]
-      );
+      // If it's an Employee ID format, only match by employee_id
+      // Otherwise, match by username, email, or employee_id
+      if (isEmployeeIdFormat) {
+        [rows] = await pool.execute<DbUser[]>(
+          `SELECT u.id, u.username, u.email, u.employee_id, u.full_name, u.role, u.password_hash, u.password_reset_required,
+                  e.status as employee_status
+           FROM users u
+           LEFT JOIN employees e ON u.employee_id = e.employee_id
+           WHERE u.employee_id = ?
+           LIMIT 1`,
+          [identifier]
+        );
+      } else {
+        [rows] = await pool.execute<DbUser[]>(
+          `SELECT u.id, u.username, u.email, u.employee_id, u.full_name, u.role, u.password_hash, u.password_reset_required,
+                  e.status as employee_status
+           FROM users u
+           LEFT JOIN employees e ON u.employee_id = e.employee_id
+           WHERE u.username = ? OR u.email = ? OR u.employee_id = ?
+           LIMIT 1`,
+          [identifier, identifier, identifier]
+        );
+      }
     } catch (columnError: any) {
       // If column doesn't exist, select without it
       if (columnError?.code === "ER_BAD_FIELD_ERROR") {
         console.warn(
           "password_reset_required column not found, selecting without it"
         );
-        [rows] = await pool.execute<DbUser[]>(
-          `SELECT id, username, email, employee_id, full_name, role, password_hash
-           FROM users
-           WHERE username = ? OR email = ? OR employee_id = ?
-           LIMIT 1`,
-          [identifier, identifier, identifier]
-        );
+        if (isEmployeeIdFormat) {
+          [rows] = await pool.execute<DbUser[]>(
+            `SELECT u.id, u.username, u.email, u.employee_id, u.full_name, u.role, u.password_hash,
+                    e.status as employee_status
+             FROM users u
+             LEFT JOIN employees e ON u.employee_id = e.employee_id
+             WHERE u.employee_id = ?
+             LIMIT 1`,
+            [identifier]
+          );
+        } else {
+          [rows] = await pool.execute<DbUser[]>(
+            `SELECT u.id, u.username, u.email, u.employee_id, u.full_name, u.role, u.password_hash,
+                    e.status as employee_status
+             FROM users u
+             LEFT JOIN employees e ON u.employee_id = e.employee_id
+             WHERE u.username = ? OR u.email = ? OR u.employee_id = ?
+             LIMIT 1`,
+            [identifier, identifier, identifier]
+          );
+        }
       } else {
         throw columnError;
       }
@@ -59,6 +92,21 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    // If Employee ID format was used, verify it matches the user's employee_id
+    if (isEmployeeIdFormat && user.employee_id !== identifier) {
+      return res.status(401).json({ 
+        message: "Invalid Employee ID. The Employee ID does not match your account." 
+      });
+    }
+
+    // Check if employee is inactive (block login)
+    const employeeStatus = (user as any).employee_status;
+    if (employeeStatus === 'inactive') {
+      return res.status(403).json({ 
+        message: "Your account has been deactivated. Please contact administrator to reactivate your account." 
+      });
     }
 
     const passwordValid =

@@ -15,6 +15,7 @@ import InactiveEmployees from "./pages/InactiveEmployees";
 import DepartmentPage from "./pages/Department";
 import DesignationPage from "./pages/Designation";
 import AttendanceList from "./pages/AttendanceList";
+import AttendanceHistory from "./pages/AttendanceHistory";
 import AddAttendance from "./pages/AddAttendance";
 import AttendanceReport from "./pages/AttendanceReport";
 import Documents from "./pages/Documents";
@@ -101,8 +102,16 @@ const App = () => (
             <Route 
               path="/attendance/list" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowedRoles={['admin']}>
                   <AttendanceList />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/attendance/history" 
+              element={
+                <ProtectedRoute allowedRoles={['employee']}>
+                  <AttendanceHistory />
                 </ProtectedRoute>
               } 
             />

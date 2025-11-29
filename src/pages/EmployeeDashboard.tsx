@@ -39,6 +39,7 @@ const EmployeeDashboard = () => {
   const [activeCapture, setActiveCapture] = useState<"checkIn" | "checkOut" | null>(null);
   const [cameraError, setCameraError] = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -135,6 +136,9 @@ const EmployeeDashboard = () => {
             checkOut: attendance.checkOut,
             status: attendance.status,
           });
+        } else {
+          // Reset attendance if no record found
+          setTodayAttendance({});
         }
       }
     } catch (error) {
@@ -153,6 +157,16 @@ const EmployeeDashboard = () => {
   };
 
   const handleOpenCamera = async (type: "checkIn" | "checkOut") => {
+    // Check if employee has registered face
+    if (!employee?.registeredFaceFile) {
+      toast({
+        variant: "destructive",
+        title: "No Registered Face",
+        description: "You do not have a registered face. Please contact administrator to register your face.",
+      });
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia) {
       toast({
         variant: "destructive",
@@ -182,8 +196,15 @@ const EmployeeDashboard = () => {
     }
   };
 
-  const handleCapturePhoto = () => {
-    if (!videoRef.current) return;
+  const handleCapturePhoto = async () => {
+    if (!videoRef.current || !employee?.registeredFaceFile) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "No registered face found. Please contact administrator.",
+      });
+      return;
+    }
     
     const video = videoRef.current;
     const canvas = document.createElement("canvas");
@@ -196,17 +217,77 @@ const EmployeeDashboard = () => {
     const dataUrl = canvas.toDataURL("image/png");
     setCapturedImage(dataUrl);
     
-    // Submit attendance
-    submitAttendance(activeCapture!, dataUrl);
-    
-    stopCamera();
-    setCameraIsOpen(false);
-    setActiveCapture(null);
+    // Verify face before submitting
+    try {
+      const verificationResult = await verifyFace(employee.registeredFaceFile, dataUrl);
+      
+      if (!verificationResult.similar) {
+        toast({
+          variant: "destructive",
+          title: "Face Verification Failed",
+          description: `Face does not match registered face. Similarity: ${(verificationResult.similarity * 100).toFixed(1)}%. Please try again.`,
+        });
+        stopCamera();
+        setCameraIsOpen(false);
+        setActiveCapture(null);
+        setCapturedImage(null);
+        return;
+      }
+      
+      // Face verified - submit attendance
+      await submitAttendance(activeCapture!, dataUrl);
+      
+      stopCamera();
+      setCameraIsOpen(false);
+      setActiveCapture(null);
+    } catch (error) {
+      console.error("Error verifying face:", error);
+      toast({
+        variant: "destructive",
+        title: "Verification Error",
+        description: "Failed to verify face. Please try again.",
+      });
+      stopCamera();
+      setCameraIsOpen(false);
+      setActiveCapture(null);
+      setCapturedImage(null);
+    }
+  };
+
+  const verifyFace = async (registeredFaceUrl: string, capturedFaceDataUrl: string): Promise<{ similar: boolean; similarity: number }> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/attendance/verify-face`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          employeeId: user?.employeeId,
+          registeredFace: registeredFaceUrl,
+          capturedFace: capturedFaceDataUrl,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Face verification failed');
+      }
+
+      const data = await response.json();
+      return {
+        similar: data.similar || false,
+        similarity: data.similarity || 0,
+      };
+    } catch (error) {
+      console.error('Error verifying face:', error);
+      // For security, reject if verification fails
+      return { similar: false, similarity: 0 };
+    }
   };
 
   const submitAttendance = async (type: "checkIn" | "checkOut", image: string) => {
     if (!user?.employeeId || !user?.fullName) return;
 
+    setIsSubmitting(true);
     const today = new Date().toISOString().split("T")[0];
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -241,21 +322,42 @@ const EmployeeDashboard = () => {
       });
 
       if (response.ok) {
+        // Immediately update local state for better UX
+        if (type === "checkIn") {
+          setTodayAttendance((prev) => ({
+            ...prev,
+            checkIn: time,
+            status: "present",
+          }));
+        } else {
+          setTodayAttendance((prev) => ({
+            ...prev,
+            checkOut: time,
+          }));
+        }
+
         toast({
           title: "Success",
           description: `Successfully recorded ${type === "checkIn" ? "Sign In" : "Sign Out"}`,
         });
-        fetchTodayAttendance();
+        
+        // Refresh from server to ensure consistency
+        await fetchTodayAttendance();
       } else {
-        throw new Error("Failed to submit attendance");
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.message || "Failed to submit attendance";
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error("Error submitting attendance", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit attendance. Please try again.";
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to submit attendance. Please try again.",
+        description: errorMessage,
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -402,11 +504,15 @@ const EmployeeDashboard = () => {
                         </p>
                         <Button
                           onClick={() => handleOpenCamera("checkIn")}
-                          disabled={!!todayAttendance.checkIn}
+                          disabled={!!todayAttendance.checkIn || isSubmitting}
                           className="w-full"
                           variant={todayAttendance.checkIn ? "outline" : "default"}
                         >
-                          {todayAttendance.checkIn ? "Already Signed In" : "Sign In"}
+                          {isSubmitting && activeCapture === "checkIn"
+                            ? "Processing..."
+                            : todayAttendance.checkIn
+                            ? "Already Signed In"
+                            : "Sign In"}
                         </Button>
                       </div>
                     </div>
@@ -427,11 +533,13 @@ const EmployeeDashboard = () => {
                         </p>
                         <Button
                           onClick={() => handleOpenCamera("checkOut")}
-                          disabled={!!todayAttendance.checkOut || !todayAttendance.checkIn}
+                          disabled={!!todayAttendance.checkOut || !todayAttendance.checkIn || isSubmitting}
                           className="w-full"
                           variant={todayAttendance.checkOut ? "outline" : "default"}
                         >
-                          {!todayAttendance.checkIn
+                          {isSubmitting
+                            ? "Processing..."
+                            : !todayAttendance.checkIn
                             ? "Sign In First"
                             : todayAttendance.checkOut
                             ? "Already Signed Out"

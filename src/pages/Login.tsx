@@ -26,10 +26,35 @@ const Login = () => {
 
   const validateForm = () => {
     const newErrors = {
-      employeeId: employeeId.trim() ? '' : 'This field is required',
-      email: email.trim() ? '' : 'This field is required',
-      password: password.trim() ? '' : 'This field is required',
+      employeeId: '',
+      email: '',
+      password: '',
     };
+
+    // Validate Employee ID format if provided
+    if (employeeId.trim()) {
+      const employeeIdPattern = /^\d{2}-[A-Z]{2,4}-\d{1,5}$/;
+      if (!employeeIdPattern.test(employeeId.trim())) {
+        newErrors.employeeId = 'Invalid Employee ID format. Expected: YY-GPC-XXXXX (e.g., 25-GPC-00008)';
+      }
+    } else {
+      newErrors.employeeId = 'This field is required';
+    }
+
+    // Validate email if provided
+    if (email.trim()) {
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(email.trim())) {
+        newErrors.email = 'Invalid email format';
+      }
+    } else {
+      newErrors.email = 'This field is required';
+    }
+
+    // Validate password
+    if (!password.trim()) {
+      newErrors.password = 'This field is required';
+    }
 
     setErrors(newErrors);
 

@@ -74,9 +74,25 @@ const Dashboard = () => {
     navigate("/organization/department", { state: { openDialog: key } });
   };
 
-  const calendarDays = Array.from({ length: 35 }, (_, i) =>
-    i < 30 ? i + 1 : null
-  );
+  // Generate calendar days properly aligned with days of week
+  const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  const calendarDays: (number | null)[] = [];
+  
+  // Add empty cells for days before month starts
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    calendarDays.push(null);
+  }
+  
+  // Add days of the month
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(i);
+  }
+  
+  // Fill remaining cells to make a complete grid (35 cells for 5 weeks)
+  while (calendarDays.length < 35) {
+    calendarDays.push(null);
+  }
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [eventType, setEventType] = useState<CalendarEventType>("reminder");
@@ -233,7 +249,26 @@ const Dashboard = () => {
       const late = attendance.filter(
         (att: any) => att.status === "late"
       ).length;
-      const absent = activeEmployeesCount - (present + late);
+      
+      // Only count absent if it's past 5 PM OR if status is already 'absent' in database
+      const now = new Date();
+      const currentHour = now.getHours();
+      const isPast5PM = currentHour >= 17;
+      
+      const explicitlyAbsent = attendance.filter(
+        (att: any) => att.status === "absent"
+      ).length;
+      
+      let absent = explicitlyAbsent;
+      
+      // If past 5 PM, count employees without attendance as absent
+      if (isPast5PM) {
+        const attendedEmployeeIds = new Set(
+          attendance.map((att: any) => att.employeeId)
+        );
+        const employeesWithoutAttendance = activeEmployeesCount - attendedEmployeeIds.size;
+        absent = explicitlyAbsent + employeesWithoutAttendance;
+      }
 
       setAttendanceStats({
         present: Math.max(0, present),

@@ -133,7 +133,7 @@ export function AdminSidebar() {
         id: "attendance",
         label: "Attendance",
         icon: Clock,
-        onClick: () => navigate("/attendance/list"),
+        onClick: () => navigate("/attendance/history"),
         active: location.pathname.startsWith("/attendance"),
       },
       {
@@ -540,54 +540,6 @@ export function AdminSidebar() {
                   </SidebarMenuItem>
                 </Collapsible>
 
-                {/* Logout */}
-                <Collapsible
-                  open={openGroups.logout}
-                  onOpenChange={() => toggleGroup("logout")}
-                >
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton className="hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                        <div className={iconClasses()}>
-                          <LogOut className="w-5 h-5 text-white" />
-                        </div>
-                        {!collapsed && (
-                          <>
-                            <span className="flex-1 text-left">Logout</span>
-                            <ChevronDown
-                              className={cn(
-                                "w-4 h-4 transition-transform",
-                                openGroups.logout && "rotate-180"
-                              )}
-                            />
-                          </>
-                        )}
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    {!collapsed && (
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              onClick={() => navigate("/profile")}
-                              isActive={isActive("/profile")}
-                            >
-                              <span>Profile</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                          <SidebarMenuSubItem>
-                            <SidebarMenuSubButton
-                              onClick={() => setLogoutDialogOpen(true)}
-                              className="text-sidebar-foreground/50"
-                            >
-                              <span>Logout</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    )}
-                  </SidebarMenuItem>
-                </Collapsible>
               </SidebarMenu>
             </SidebarGroup>
           ) : (

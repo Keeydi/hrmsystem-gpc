@@ -1177,7 +1177,7 @@ const Documents = () => {
               </DialogDescription>
             </DialogHeader>
             {viewingDoc && (
-              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100">
+              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100 relative">
                 {viewingDoc.isBase64 ? (
                   // Base64 file - embed directly to avoid CSP issues
                   <object
@@ -1186,27 +1186,66 @@ const Documents = () => {
                     className="w-full h-full"
                     aria-label={viewingDoc.title}
                   >
-                    <div className="flex items-center justify-center h-full">
-                      <p className="text-muted-foreground">
-                        PDF viewer not supported.{" "}
-                        <a
-                          href={viewingDoc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline"
-                        >
-                          Open in new tab
-                        </a>
+                    <div className="flex flex-col items-center justify-center h-full gap-4">
+                      <p className="text-muted-foreground text-center">
+                        PDF viewer not supported in this browser.
                       </p>
+                      <Button
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = viewingDoc.url;
+                          link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
+                          link.target = '_blank';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download PDF
+                      </Button>
                     </div>
                   </object>
                 ) : (
-                  // Server file - use iframe
-                  <iframe
-                    src={viewingDoc.url}
-                    className="w-full h-full border-0"
-                    title={viewingDoc.title}
-                  />
+                  // Server file - use iframe with error handling
+                  <>
+                    <iframe
+                      src={viewingDoc.url}
+                      className="w-full h-full border-0"
+                      title={viewingDoc.title}
+                      onLoad={(e) => {
+                        // Check if iframe loaded successfully
+                        try {
+                          const iframe = e.target as HTMLIFrameElement;
+                          // If we can't access content, it might be a CORS issue
+                          if (iframe.contentWindow) {
+                            // Iframe loaded successfully
+                          }
+                        } catch (error) {
+                          // CORS error - show fallback
+                          console.warn('Iframe load check failed (likely CORS):', error);
+                        }
+                      }}
+                    />
+                    <div className="absolute bottom-4 right-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = viewingDoc.url;
+                          link.download = `${viewingDoc.type}_${viewingDoc.title.split(' - ')[1] || 'document'}.pdf`;
+                          link.target = '_blank';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download if viewer fails
+                      </Button>
+                    </div>
+                  </>
                 )}
               </div>
             )}

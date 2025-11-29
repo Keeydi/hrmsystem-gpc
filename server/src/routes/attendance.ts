@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool } from '../db';
 import { DbAttendance } from '../types';
 import { logActivity, getClientIp } from '../utils/activityLogger';
+import { compareFaces } from '../utils/faceRecognition';
 
 const router = Router();
 
@@ -164,15 +165,28 @@ router.post('/', async (req, res) => {
     );
 
     const insertId = (result as any).insertId;
+    const affectedRows = (result as any).affectedRows;
+
+    // If it was an update (insertId is 0), query by employee_id and date instead
+    let recordId = insertId;
+    if (insertId === 0 && affectedRows > 0) {
+      const [existingRows] = await pool.execute<DbAttendance[]>(
+        `SELECT id FROM attendance WHERE employee_id = ? AND date = ?`,
+        [employeeId, date],
+      );
+      if (existingRows && existingRows.length > 0) {
+        recordId = existingRows[0].id;
+      }
+    }
 
     // Log activity
     await logActivity({
       userName: req.body.createdBy || 'System',
-      actionType: 'CREATE',
+      actionType: recordId && insertId > 0 ? 'CREATE' : 'UPDATE',
       resourceType: 'Attendance',
-      resourceId: String(insertId),
+      resourceId: String(recordId),
       resourceName: `${employeeName} - ${date}`,
-      description: `Attendance record created for ${employeeName} (${employeeId}) on ${date}`,
+      description: `Attendance record ${recordId && insertId > 0 ? 'created' : 'updated'} for ${employeeName} (${employeeId}) on ${date}`,
       ipAddress: getClientIp(req),
       status: 'success',
       metadata: { employeeId, date, status },
@@ -182,12 +196,16 @@ router.post('/', async (req, res) => {
       `SELECT id, employee_id, employee_name, date, check_in, check_out, status, notes, 
               check_in_image, check_out_image, created_at, updated_at
        FROM attendance
-       WHERE id = ?`,
-      [insertId],
+       WHERE employee_id = ? AND date = ?`,
+      [employeeId, date],
     );
 
+    if (!newRows || newRows.length === 0) {
+      return res.status(500).json({ message: 'Failed to retrieve attendance record after save' });
+    }
+
     return res.status(201).json({
-      message: 'Attendance record created successfully',
+      message: 'Attendance record saved successfully',
       data: mapAttendanceRow(newRows[0]),
     });
   } catch (error) {
@@ -335,6 +353,54 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting attendance', error);
     return res.status(500).json({ message: 'Unexpected error while deleting attendance' });
+  }
+});
+
+// POST /attendance/verify-face - Verify captured face matches registered face
+router.post('/verify-face', async (req, res) => {
+  try {
+    const { employeeId, registeredFace, capturedFace } = req.body;
+
+    if (!employeeId || !registeredFace || !capturedFace) {
+      return res.status(400).json({
+        message: 'Missing required fields: employeeId, registeredFace, and capturedFace are required',
+      });
+    }
+
+    // Get registered face from database if not provided
+    let registeredFaceData = registeredFace;
+    if (!registeredFaceData) {
+      const [rows] = await pool.execute<any[]>(
+        'SELECT registered_face_file FROM employees WHERE employee_id = ?',
+        [employeeId]
+      );
+
+      if (rows.length === 0) {
+        return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      if (!rows[0].registered_face_file) {
+        return res.status(400).json({
+          message: 'Employee does not have a registered face. Please register face first.',
+        });
+      }
+
+      registeredFaceData = rows[0].registered_face_file;
+    }
+
+    // Compare faces
+    const result = await compareFaces(registeredFaceData, capturedFace);
+
+    return res.json({
+      similar: result.similar,
+      similarity: result.similarity,
+      message: result.similar
+        ? 'Face verification successful'
+        : 'Face verification failed - faces do not match',
+    });
+  } catch (error) {
+    console.error('Error verifying face', error);
+    return res.status(500).json({ message: 'Unexpected error while verifying face' });
   }
 });
 
