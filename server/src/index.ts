@@ -95,6 +95,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import path from "path";
+import fs from "fs";
 import "./db"; // Initialize database connection
 
 import authRoutes from "./routes/auth";
@@ -139,14 +140,40 @@ app.use(
   })
 );
 
-app.use(helmet());
+// Configure helmet to allow iframes from frontend
+// Disable CSP for document routes (we'll set it per-route)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      frameAncestors: ["'self'", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:4000"],
+      frameSrc: ["'self'", "http://localhost:4000", "http://127.0.0.1:4000"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // Allow embedding documents
+}));
 
 // ⭐ FIXED PART — increase body limits for image uploads
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-// Static uploads folder
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Static uploads folder - use same path as multer (server/src/uploads/)
+// Files are saved to server/src/uploads/ by multer in documents.ts
+const uploadsStaticPath = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsStaticPath)) {
+  fs.mkdirSync(uploadsStaticPath, { recursive: true });
+}
+console.log('Static uploads path:', uploadsStaticPath);
+
+// Add CSP headers to static files to allow framing
+app.use("/uploads", (req, res, next) => {
+  // Set CSP headers to allow framing from frontend
+  const frontendOrigins = process.env.CLIENT_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  const cspValue = `frame-ancestors 'self' ${frontendOrigins.join(' ')}`;
+  res.setHeader('Content-Security-Policy', cspValue);
+  // Don't set X-Frame-Options as it conflicts with CSP
+  next();
+}, express.static(uploadsStaticPath));
 
 // Health check route
 app.get("/health", (_, res) => {

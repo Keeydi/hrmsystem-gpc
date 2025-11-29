@@ -9,9 +9,29 @@ import fs from 'fs';
 
 const router = Router();
 
-// Configure multer for file uploads
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads/');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+console.log('Multer uploads directory:', uploadsDir);
+
+// Configure multer for file uploads with filename preservation
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    // Preserve original filename with timestamp to avoid conflicts
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    const name = path.basename(file.originalname, ext);
+    cb(null, `${name}-${uniqueSuffix}${ext}`);
+  },
+});
+
 const upload = multer({
-  dest: path.join(__dirname, '../uploads/'), // Directory to store uploaded files
+  storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
@@ -185,7 +205,17 @@ router.post('/', upload.single('file'), async (req, res) => {
     } = parseResult.data;
 
     // Generate file URL (in production, this would be a proper URL)
+    // Use the filename from multer which now preserves extension
     const fileUrl = `/uploads/${req.file.filename}`;
+    
+    // Log for debugging
+    console.log('Document uploaded:', {
+      originalName: req.file.originalname,
+      savedAs: req.file.filename,
+      path: req.file.path,
+      url: fileUrl,
+      size: req.file.size,
+    });
 
     const [result] = await pool.execute(
       `INSERT INTO documents 
@@ -328,6 +358,71 @@ router.put('/:id', upload.single('file'), async (req, res) => {
   }
 });
 
+// GET /documents/serve/:id - Serve document file by document ID
+router.get('/serve/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const [rows] = await pool.execute<DbDocument[]>(
+      'SELECT file_path, file_url, name FROM documents WHERE id = ?',
+      [id]
+    );
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+    
+    const doc = rows[0];
+    let filePath: string | null = null;
+    
+    // Try file_path first (absolute path)
+    if (doc.file_path && fs.existsSync(doc.file_path)) {
+      filePath = doc.file_path;
+    }
+    // Try file_url (relative path like /uploads/filename)
+    else if (doc.file_url) {
+      const filename = doc.file_url.replace('/uploads/', '');
+      const relativePath = path.join(__dirname, '../uploads/', filename);
+      if (fs.existsSync(relativePath)) {
+        filePath = relativePath;
+      }
+    }
+    
+    if (!filePath) {
+      return res.status(404).json({ message: 'File not found on server' });
+    }
+    
+    // Determine content type from file extension
+    const ext = path.extname(filePath).toLowerCase();
+    const contentTypeMap: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.txt': 'text/plain',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+    };
+    const contentType = contentTypeMap[ext] || 'application/octet-stream';
+    
+    // Set headers to allow embedding
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.name}"`);
+    // Remove X-Frame-Options when using CSP frame-ancestors (they can conflict)
+    // Allow framing from frontend origin
+    const frontendOrigins = process.env.CLIENT_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173'];
+    const cspValue = `frame-ancestors 'self' ${frontendOrigins.join(' ')}`;
+    res.setHeader('Content-Security-Policy', cspValue);
+    
+    return res.sendFile(path.resolve(filePath));
+  } catch (error) {
+    console.error('Error serving document', error);
+    return res.status(500).json({ message: 'Error serving file' });
+  }
+});
+
 // GET /documents/file/:employeeId/:type - Serve employee document file (handles base64 or file path)
 router.get('/file/:employeeId/:type', async (req, res) => {
   try {
@@ -388,8 +483,10 @@ router.get('/file/:employeeId/:type', async (req, res) => {
         // Set headers to allow embedding and prevent CSP issues
         res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Disposition', `inline; filename="${type}_${employeeId}"`);
-        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        // Remove X-Frame-Options when using CSP frame-ancestors
+        const frontendOrigins = process.env.CLIENT_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173'];
+        const cspValue = `frame-ancestors 'self' ${frontendOrigins.join(' ')}`;
+        res.setHeader('Content-Security-Policy', cspValue);
         return res.send(buffer);
       }
     }
@@ -401,16 +498,20 @@ router.get('/file/:employeeId/:type', async (req, res) => {
       
       if (fs.existsSync(filePath)) {
         // Set headers to allow embedding
-        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        // Remove X-Frame-Options when using CSP frame-ancestors
+        const frontendOrigins = process.env.CLIENT_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173'];
+        const cspValue = `frame-ancestors 'self' ${frontendOrigins.join(' ')}`;
+        res.setHeader('Content-Security-Policy', cspValue);
         return res.sendFile(filePath);
       }
     }
     
     // If file_path is an absolute path, try to serve it directly
     if (fileData && fs.existsSync(fileData)) {
-      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-      res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+      // Remove X-Frame-Options when using CSP frame-ancestors
+      const frontendOrigins = process.env.CLIENT_ORIGIN?.split(',').map(o => o.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173'];
+      const cspValue = `frame-ancestors 'self' ${frontendOrigins.join(' ')}`;
+      res.setHeader('Content-Security-Policy', cspValue);
       return res.sendFile(path.resolve(fileData));
     }
     

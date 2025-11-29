@@ -74,25 +74,6 @@ const Dashboard = () => {
     navigate("/organization/department", { state: { openDialog: key } });
   };
 
-  // Generate calendar days properly aligned with days of week
-  const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay();
-  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-  const calendarDays: (number | null)[] = [];
-  
-  // Add empty cells for days before month starts
-  for (let i = 0; i < firstDayOfMonth; i++) {
-    calendarDays.push(null);
-  }
-  
-  // Add days of the month
-  for (let i = 1; i <= daysInMonth; i++) {
-    calendarDays.push(i);
-  }
-  
-  // Fill remaining cells to make a complete grid (35 cells for 5 weeks)
-  while (calendarDays.length < 35) {
-    calendarDays.push(null);
-  }
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [eventType, setEventType] = useState<CalendarEventType>("reminder");
@@ -122,6 +103,26 @@ const Dashboard = () => {
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1; // 1-12
   const currentYear = currentDate.getFullYear();
+
+  // Generate calendar days properly aligned with days of week
+  const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  const calendarDays: (number | null)[] = [];
+  
+  // Add empty cells for days before month starts
+  for (let i = 0; i < firstDayOfMonth; i++) {
+    calendarDays.push(null);
+  }
+  
+  // Add days of the month
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(i);
+  }
+  
+  // Fill remaining cells to make a complete grid (35 cells for 5 weeks)
+  while (calendarDays.length < 35) {
+    calendarDays.push(null);
+  }
 
   // Convert day number to actual date string (YYYY-MM-DD)
   const dayToDate = (day: number): string => {
@@ -689,8 +690,8 @@ const Dashboard = () => {
 
           {/* Calendar and To Do List */}
           <div className="grid gap-3 md:grid-cols-2">
-            <Card className="h-[320px] flex flex-col">
-              <CardHeader className="pb-2">
+            <Card className="h-[320px] flex flex-col overflow-hidden">
+              <CardHeader className="pb-2 flex-shrink-0">
                 <CardTitle className="text-xl">
                   {new Date()
                     .toLocaleDateString("en-US", {
@@ -700,8 +701,8 @@ const Dashboard = () => {
                     .toUpperCase()}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-0 flex-1 flex flex-col">
-                <div className="grid grid-cols-7 gap-1 mb-2">
+              <CardContent className="pt-0 flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="grid grid-cols-7 gap-1 mb-2 flex-shrink-0">
                   {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
                     <div
                       key={i}
@@ -711,7 +712,7 @@ const Dashboard = () => {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-7 gap-1 flex-1 auto-rows-[minmax(35px,1fr)]">
+                <div className="grid grid-cols-7 gap-1 flex-1 min-h-0" style={{ gridTemplateRows: 'repeat(5, minmax(0, 1fr))' }}>
                   {calendarDays.map((day, index) => {
                     const dayEvents = day ? calendarEvents[day] || [] : [];
                     const hasEvents = dayEvents.length > 0;
@@ -724,7 +725,7 @@ const Dashboard = () => {
 
                     const DayContent = (
                       <div
-                        className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors ${
+                        className={`relative flex h-full w-full flex-col items-center justify-center rounded-md text-sm transition-colors overflow-hidden ${
                           day
                             ? "hover:bg-accent cursor-pointer active:bg-accent/80"
                             : "cursor-default text-transparent pointer-events-none"
@@ -745,7 +746,7 @@ const Dashboard = () => {
                           }
                         }}
                       >
-                        <span className="font-medium">{day ?? ""}</span>
+                        <span className="font-medium text-xs sm:text-sm truncate">{day ?? ""}</span>
                         {day && hasEvents && (
                           <div className="mt-1 flex items-center gap-0.5">
                             {hasEventType && (

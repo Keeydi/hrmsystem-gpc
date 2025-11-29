@@ -666,15 +666,50 @@ const Documents = () => {
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
-                                  const isBase64 = doc.pds?.startsWith('data:');
+                                  if (!doc.pds) {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "No document file available.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  const isBase64 = doc.pds.startsWith('data:');
                                   let fileUrl: string;
                                   if (isBase64) {
                                     // Base64 file - use it directly
                                     fileUrl = doc.pds;
-                                  } else {
+                                  } else if (doc.pds.startsWith('/uploads/')) {
+                                    // Uploads path - construct full URL
+                                    fileUrl = `${API_BASE_URL}${doc.pds}`;
+                                  } else if (doc.pds.startsWith('http')) {
+                                    // Already a full URL
+                                    fileUrl = doc.pds;
+                                  } else if (doc.employeeId) {
                                     // File path - use backend route to serve it
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
+                                  } else {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
                                   }
+                                  
+                                  // Validate URL before setting
+                                  if (!fileUrl || fileUrl.trim() === '' || fileUrl === `${API_BASE_URL}/` || fileUrl === API_BASE_URL || fileUrl.endsWith('/')) {
+                                    console.error('Invalid fileUrl:', fileUrl);
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  console.log('Setting viewingDoc URL:', fileUrl, 'from doc.pds:', doc.pds);
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Personal Data Sheet - ${doc.employeeId}`,
@@ -730,15 +765,50 @@ const Documents = () => {
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
-                                  const isBase64 = doc.sr?.startsWith('data:');
+                                  if (!doc.sr) {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "No document file available.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  const isBase64 = doc.sr.startsWith('data:');
                                   let fileUrl: string;
                                   if (isBase64) {
                                     // Base64 file - use it directly
                                     fileUrl = doc.sr;
-                                  } else {
+                                  } else if (doc.sr.startsWith('/uploads/')) {
+                                    // Uploads path - construct full URL
+                                    fileUrl = `${API_BASE_URL}${doc.sr}`;
+                                  } else if (doc.sr.startsWith('http')) {
+                                    // Already a full URL
+                                    fileUrl = doc.sr;
+                                  } else if (doc.employeeId) {
                                     // File path - use backend route to serve it
                                     fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
+                                  } else {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
                                   }
+                                  
+                                  // Validate URL before setting
+                                  if (!fileUrl || fileUrl.trim() === '' || fileUrl === `${API_BASE_URL}/` || fileUrl === API_BASE_URL || fileUrl.endsWith('/')) {
+                                    console.error('Invalid fileUrl:', fileUrl);
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  console.log('Setting viewingDoc URL:', fileUrl, 'from doc.sr:', doc.sr);
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Service Record - ${doc.employeeId}`,
@@ -793,17 +863,53 @@ const Documents = () => {
                                 size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
                                 onClick={() => {
-                                  const isBase64 = doc.coe?.startsWith('data:');
+                                  if (!doc.coe) {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "No document file available.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  const isBase64 = doc.coe.startsWith('data:');
                                   let fileUrl: string;
                                   if (isBase64) {
                                     // Base64 file - use it directly
                                     fileUrl = doc.coe;
-                                  } else {
+                                  } else if (doc.coe.startsWith('/uploads/')) {
+                                    // Uploads path - construct full URL
+                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
+                                  } else if (doc.coe.startsWith('http')) {
+                                    // Already a full URL
+                                    fileUrl = doc.coe;
+                                  } else if (doc.coe.startsWith('/') && doc.employeeId) {
+                                    // Relative path - use backend route
+                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
+                                  } else if (doc.employeeId) {
                                     // File path - use backend route to serve it
-                                    fileUrl = doc.coe.startsWith('/') 
-                                      ? `${API_BASE_URL}${doc.coe}`
-                                      : `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                  } else {
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
                                   }
+                                  
+                                  // Validate URL before setting
+                                  if (!fileUrl || fileUrl.trim() === '' || fileUrl === `${API_BASE_URL}/` || fileUrl === API_BASE_URL || fileUrl.endsWith('/')) {
+                                    console.error('Invalid fileUrl:', fileUrl);
+                                    toast({
+                                      variant: "destructive",
+                                      title: "Error",
+                                      description: "Invalid document URL. Please contact administrator.",
+                                    });
+                                    return;
+                                  }
+                                  
+                                  console.log('Setting viewingDoc URL:', fileUrl, 'from doc.coe:', doc.coe);
                                   setViewingDoc({
                                     url: fileUrl,
                                     title: `Certificate of Employment - ${doc.employeeId}`,
@@ -1176,7 +1282,7 @@ const Documents = () => {
                 View the document in the viewer below
               </DialogDescription>
             </DialogHeader>
-            {viewingDoc && (
+            {viewingDoc && viewingDoc.url && viewingDoc.url !== `${API_BASE_URL}/` && viewingDoc.url !== API_BASE_URL ? (
               <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100 relative">
                 {viewingDoc.isBase64 ? (
                   // Base64 file - embed directly to avoid CSP issues
@@ -1213,11 +1319,19 @@ const Documents = () => {
                       src={viewingDoc.url}
                       className="w-full h-full border-0"
                       title={viewingDoc.title}
+                      onError={() => {
+                        toast({
+                          variant: "destructive",
+                          title: "Error",
+                          description: "Failed to load document. Please try downloading instead.",
+                        });
+                      }}
                       onLoad={(e) => {
                         // Check if iframe loaded successfully
                         try {
                           const iframe = e.target as HTMLIFrameElement;
-                          // If we can't access content, it might be a CORS issue
+                          // Log for debugging
+                          console.log('Document iframe loaded:', viewingDoc.url);
                           if (iframe.contentWindow) {
                             // Iframe loaded successfully
                           }
@@ -1248,7 +1362,14 @@ const Documents = () => {
                   </>
                 )}
               </div>
-            )}
+            ) : viewingDoc ? (
+              <div className="w-full h-[75vh] border rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                <div className="text-center space-y-4">
+                  <p className="text-muted-foreground">Document URL is invalid or missing.</p>
+                  <p className="text-sm text-muted-foreground">Please contact administrator or try uploading the document again.</p>
+                </div>
+              </div>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
