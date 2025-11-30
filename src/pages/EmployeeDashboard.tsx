@@ -157,16 +157,6 @@ const EmployeeDashboard = () => {
   };
 
   const handleOpenCamera = async (type: "checkIn" | "checkOut") => {
-    // Check if employee has registered face
-    if (!employee?.registeredFaceFile) {
-      toast({
-        variant: "destructive",
-        title: "No Registered Face",
-        description: "You do not have a registered face. Please contact administrator to register your face.",
-      });
-      return;
-    }
-
     if (!navigator.mediaDevices?.getUserMedia) {
       toast({
         variant: "destructive",
@@ -197,12 +187,7 @@ const EmployeeDashboard = () => {
   };
 
   const handleCapturePhoto = async () => {
-    if (!videoRef.current || !employee?.registeredFaceFile) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "No registered face found. Please contact administrator.",
-      });
+    if (!videoRef.current || !activeCapture) {
       return;
     }
     
@@ -217,70 +202,24 @@ const EmployeeDashboard = () => {
     const dataUrl = canvas.toDataURL("image/png");
     setCapturedImage(dataUrl);
     
-    // Verify face before submitting
+    // Submit attendance directly without face verification
     try {
-      const verificationResult = await verifyFace(employee.registeredFaceFile, dataUrl);
-      
-      if (!verificationResult.similar) {
-        toast({
-          variant: "destructive",
-          title: "Face Verification Failed",
-          description: `Face does not match registered face. Similarity: ${(verificationResult.similarity * 100).toFixed(1)}%. Please try again.`,
-        });
-        stopCamera();
-        setCameraIsOpen(false);
-        setActiveCapture(null);
-        setCapturedImage(null);
-        return;
-      }
-      
-      // Face verified - submit attendance
-      await submitAttendance(activeCapture!, dataUrl);
+      await submitAttendance(activeCapture, dataUrl);
       
       stopCamera();
       setCameraIsOpen(false);
       setActiveCapture(null);
     } catch (error) {
-      console.error("Error verifying face:", error);
+      console.error("Error submitting attendance:", error);
       toast({
         variant: "destructive",
-        title: "Verification Error",
-        description: "Failed to verify face. Please try again.",
+        title: "Error",
+        description: "Failed to submit attendance. Please try again.",
       });
       stopCamera();
       setCameraIsOpen(false);
       setActiveCapture(null);
       setCapturedImage(null);
-    }
-  };
-
-  const verifyFace = async (registeredFaceUrl: string, capturedFaceDataUrl: string): Promise<{ similar: boolean; similarity: number }> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/attendance/verify-face`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          employeeId: user?.employeeId,
-          registeredFace: registeredFaceUrl,
-          capturedFace: capturedFaceDataUrl,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Face verification failed');
-      }
-
-      const data = await response.json();
-      return {
-        similar: data.similar || false,
-        similarity: data.similarity || 0,
-      };
-    } catch (error) {
-      console.error('Error verifying face:', error);
-      // For security, reject if verification fails
-      return { similar: false, similarity: 0 };
     }
   };
 

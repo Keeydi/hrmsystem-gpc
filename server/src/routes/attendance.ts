@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { pool } from '../db';
 import { DbAttendance } from '../types';
 import { logActivity, getClientIp } from '../utils/activityLogger';
-import { compareFaces } from '../utils/faceRecognition';
 
 const router = Router();
 
@@ -353,54 +352,6 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting attendance', error);
     return res.status(500).json({ message: 'Unexpected error while deleting attendance' });
-  }
-});
-
-// POST /attendance/verify-face - Verify captured face matches registered face
-router.post('/verify-face', async (req, res) => {
-  try {
-    const { employeeId, registeredFace, capturedFace } = req.body;
-
-    if (!employeeId || !registeredFace || !capturedFace) {
-      return res.status(400).json({
-        message: 'Missing required fields: employeeId, registeredFace, and capturedFace are required',
-      });
-    }
-
-    // Get registered face from database if not provided
-    let registeredFaceData = registeredFace;
-    if (!registeredFaceData) {
-      const [rows] = await pool.execute<any[]>(
-        'SELECT registered_face_file FROM employees WHERE employee_id = ?',
-        [employeeId]
-      );
-
-      if (rows.length === 0) {
-        return res.status(404).json({ message: 'Employee not found' });
-      }
-
-      if (!rows[0].registered_face_file) {
-        return res.status(400).json({
-          message: 'Employee does not have a registered face. Please register face first.',
-        });
-      }
-
-      registeredFaceData = rows[0].registered_face_file;
-    }
-
-    // Compare faces
-    const result = await compareFaces(registeredFaceData, capturedFace);
-
-    return res.json({
-      similar: result.similar,
-      similarity: result.similarity,
-      message: result.similar
-        ? 'Face verification successful'
-        : 'Face verification failed - faces do not match',
-    });
-  } catch (error) {
-    console.error('Error verifying face', error);
-    return res.status(500).json({ message: 'Unexpected error while verifying face' });
   }
 });
 

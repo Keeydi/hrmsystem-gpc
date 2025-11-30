@@ -1230,21 +1230,45 @@ const Documents = () => {
                             user?.fullName || "System"
                           );
 
-                          const response = await fetch(
-                            `${API_BASE_URL}/documents`,
-                            {
-                              method: "POST",
-                              body: formData,
+                          // Check if document exists in documents table
+                          let existingDocId: string | null = null;
+                          if (editingDoc.currentUrl) {
+                            try {
+                              const checkResponse = await fetch(
+                                `${API_BASE_URL}/documents?employeeId=${editingDoc.employeeId}&documentType=${editingDoc.type}&type=employee-doc`
+                              );
+                              if (checkResponse.ok) {
+                                const checkData = await checkResponse.json();
+                                if (checkData.data && checkData.data.length > 0) {
+                                  existingDocId = checkData.data[0].id;
+                                }
+                              }
+                            } catch (checkError) {
+                              console.error("Error checking existing document", checkError);
                             }
-                          );
+                          }
+
+                          // Use PUT if document exists, POST if it doesn't
+                          const method = existingDocId ? "PUT" : "POST";
+                          const url = existingDocId 
+                            ? `${API_BASE_URL}/documents/${existingDocId}`
+                            : `${API_BASE_URL}/documents`;
+
+                          const response = await fetch(url, {
+                            method: method,
+                            body: formData,
+                          });
 
                           if (!response.ok) {
-                            throw new Error("Failed to upload document");
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.message || "Failed to upload document");
                           }
 
                           toast({
                             title: "Success",
-                            description: "Document uploaded successfully",
+                            description: existingDocId 
+                              ? "Document replaced successfully" 
+                              : "Document uploaded successfully",
                           });
 
                           // Refresh documents
@@ -1260,7 +1284,9 @@ const Documents = () => {
                           variant: "destructive",
                           title: "Error",
                           description:
-                            "Failed to upload document. Please try again.",
+                            error instanceof Error 
+                              ? error.message 
+                              : "Failed to upload document. Please try again.",
                         });
                       }
                     }}
