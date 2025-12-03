@@ -96,12 +96,15 @@ interface Document {
 
 const Documents = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [formerSearchTerm, setFormerSearchTerm] = useState("");
   const [selectedFolder, setSelectedFolder] = useState<SelectedFolder>(null);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [activeModal, setActiveModal] = useState<DocumentNavKey | null>(null);
   const [modalForm, setModalForm] = useState<Record<string, string>>({});
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [formerDocuments, setFormerDocuments] = useState<Document[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [formerEmployees, setFormerEmployees] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -128,13 +131,93 @@ const Documents = () => {
   const [activeTemplateKey, setActiveTemplateKey] =
     useState<DocumentTemplateKey | null>(null);
 
+  // Helper function to process employee documents
+  const processEmployeeDocuments = (employeesData: any[], documentsData: any[]) => {
+    const employeeMap = new Map(
+      employeesData.map((emp: any) => [emp.employeeId, emp])
+    );
+
+    const employeeDocs = new Map<string, Document>();
+
+    // First, add documents from employees table (pds_file, service_record_file)
+    employeesData.forEach((emp: any) => {
+      if (emp.employeeId && !employeeDocs.has(emp.employeeId)) {
+        employeeDocs.set(emp.employeeId, {
+          id: emp.employeeId,
+          name: emp.fullName || "",
+          employeeId: emp.employeeId,
+          pds: emp.pdsFile 
+            ? (emp.pdsFile.startsWith('data:') ? emp.pdsFile : `/uploads/${emp.pdsFile}`)
+            : null,
+          sr: emp.serviceRecordFile
+            ? (emp.serviceRecordFile.startsWith('data:') ? emp.serviceRecordFile : `/uploads/${emp.serviceRecordFile}`)
+            : null,
+          coe: null,
+          date: emp.createdAt || new Date().toISOString(),
+        });
+      } else if (emp.employeeId) {
+        const empDoc = employeeDocs.get(emp.employeeId)!;
+        if (emp.pdsFile && !empDoc.pds) {
+          empDoc.pds = emp.pdsFile.startsWith('data:') 
+            ? emp.pdsFile 
+            : `/uploads/${emp.pdsFile}`;
+        }
+        if (emp.serviceRecordFile && !empDoc.sr) {
+          empDoc.sr = emp.serviceRecordFile.startsWith('data:')
+            ? emp.serviceRecordFile
+            : `/uploads/${emp.serviceRecordFile}`;
+        }
+      }
+    });
+
+    // Then, add/update with documents from documents table
+    documentsData.forEach((doc: any) => {
+      if (doc.employeeId && employeeMap.has(doc.employeeId)) {
+        if (!employeeDocs.has(doc.employeeId)) {
+          const employee = employeeMap.get(doc.employeeId);
+          employeeDocs.set(doc.employeeId, {
+            id: doc.employeeId,
+            name: employee?.fullName || "",
+            employeeId: doc.employeeId,
+            pds: null,
+            sr: null,
+            coe: null,
+            date: doc.createdAt || doc.uploadedAt,
+          });
+        }
+
+        const empDoc = employeeDocs.get(doc.employeeId)!;
+        const docType = doc.documentType?.toLowerCase() || "";
+        if (
+          docType === "pds" ||
+          doc.name.toLowerCase().includes("pds") ||
+          doc.name.toLowerCase().includes("personal data")
+        ) {
+          empDoc.pds = doc.fileUrl;
+        } else if (
+          docType === "sr" ||
+          doc.name.toLowerCase().includes("service")
+        ) {
+          empDoc.sr = doc.fileUrl;
+        } else if (
+          docType === "coe" ||
+          doc.name.toLowerCase().includes("certificate")
+        ) {
+          empDoc.coe = doc.fileUrl;
+        }
+      }
+    });
+
+    return Array.from(employeeDocs.values());
+  };
+
   // Helper function to fetch and process documents
   const fetchAndProcessDocuments = async () => {
     try {
-      const [documentsRes, employeesRes, allDocsRes] = await Promise.all([
+      const [documentsRes, activeEmployeesRes, inactiveEmployeesRes] = await Promise.all([
         fetch(`${API_BASE_URL}/documents?type=employee-doc`),
         fetch(`${API_BASE_URL}/employees?status=active`),
-        fetch(`${API_BASE_URL}/documents?type=employee-doc`),
+        fetch(`${API_BASE_URL}/employees?status=inactive`),
       ]);
 
       if (!documentsRes.ok) {
@@ -142,93 +225,28 @@ const Documents = () => {
       }
 
       const documentsData = await documentsRes.json();
-      const allDocsData = await allDocsRes.json();
-      let employeesData: any[] = [];
+      let activeEmployeesData: any[] = [];
+      let inactiveEmployeesData: any[] = [];
 
-      if (employeesRes.ok) {
-        const empData = await employeesRes.json();
-        employeesData = empData.data || [];
-        setEmployees(employeesData);
+      if (activeEmployeesRes.ok) {
+        const empData = await activeEmployeesRes.json();
+        activeEmployeesData = empData.data || [];
+        setEmployees(activeEmployeesData);
       }
 
-      // Create employee map for names and files
-      const employeeMap = new Map(
-        employeesData.map((emp: any) => [emp.employeeId, emp])
-      );
+      if (inactiveEmployeesRes.ok) {
+        const empData = await inactiveEmployeesRes.json();
+        inactiveEmployeesData = empData.data || [];
+        setFormerEmployees(inactiveEmployeesData);
+      }
 
-      // Group documents by employee
-      const employeeDocs = new Map<string, Document>();
+      // Process active employee documents
+      const activeDocuments = processEmployeeDocuments(activeEmployeesData, documentsData.data || []);
+      setDocuments(activeDocuments);
 
-      // First, add documents from employees table (pds_file, service_record_file)
-      employeesData.forEach((emp: any) => {
-        if (emp.employeeId && !employeeDocs.has(emp.employeeId)) {
-          employeeDocs.set(emp.employeeId, {
-            id: emp.employeeId,
-            name: emp.fullName || "",
-            employeeId: emp.employeeId,
-            pds: emp.pdsFile 
-              ? (emp.pdsFile.startsWith('data:') ? emp.pdsFile : `/uploads/${emp.pdsFile}`)
-              : null,
-            sr: emp.serviceRecordFile
-              ? (emp.serviceRecordFile.startsWith('data:') ? emp.serviceRecordFile : `/uploads/${emp.serviceRecordFile}`)
-              : null,
-            coe: null,
-            date: emp.createdAt || new Date().toISOString(),
-          });
-        } else if (emp.employeeId) {
-          const empDoc = employeeDocs.get(emp.employeeId)!;
-          if (emp.pdsFile && !empDoc.pds) {
-            empDoc.pds = emp.pdsFile.startsWith('data:') 
-              ? emp.pdsFile 
-              : `/uploads/${emp.pdsFile}`;
-          }
-          if (emp.serviceRecordFile && !empDoc.sr) {
-            empDoc.sr = emp.serviceRecordFile.startsWith('data:')
-              ? emp.serviceRecordFile
-              : `/uploads/${emp.serviceRecordFile}`;
-          }
-        }
-      });
-
-      // Then, add/update with documents from documents table
-      documentsData.data.forEach((doc: any) => {
-        if (doc.employeeId) {
-          if (!employeeDocs.has(doc.employeeId)) {
-            const employee = employeeMap.get(doc.employeeId);
-            employeeDocs.set(doc.employeeId, {
-              id: doc.employeeId,
-              name: employee?.fullName || "",
-              employeeId: doc.employeeId,
-              pds: null,
-              sr: null,
-              coe: null,
-              date: doc.createdAt || doc.uploadedAt,
-            });
-          }
-
-          const empDoc = employeeDocs.get(doc.employeeId)!;
-          const docType = doc.documentType?.toLowerCase() || "";
-          if (
-            docType === "pds" ||
-            doc.name.toLowerCase().includes("pds") ||
-            doc.name.toLowerCase().includes("personal data")
-          ) {
-            empDoc.pds = doc.fileUrl;
-          } else if (
-            docType === "sr" ||
-            doc.name.toLowerCase().includes("service")
-          ) {
-            empDoc.sr = doc.fileUrl;
-          } else if (
-            docType === "coe" ||
-            doc.name.toLowerCase().includes("certificate")
-          ) {
-            empDoc.coe = doc.fileUrl;
-          }
-        }
-      });
-
-      setDocuments(Array.from(employeeDocs.values()));
+      // Process inactive/former employee documents
+      const formerDocs = processEmployeeDocuments(inactiveEmployeesData, documentsData.data || []);
+      setFormerDocuments(formerDocs);
     } catch (error) {
       console.error("Error fetching documents", error);
       throw error;
@@ -355,6 +373,12 @@ const Documents = () => {
   const filteredDocs = documents.filter((doc) =>
     [doc.name, doc.employeeId, doc.pds, doc.sr, doc.coe].some((value) =>
       value?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  );
+
+  const filteredFormerDocs = formerDocuments.filter((doc) =>
+    [doc.name, doc.employeeId, doc.pds, doc.sr, doc.coe].some((value) =>
+      value?.toLowerCase().includes(formerSearchTerm.toLowerCase())
     )
   );
 
@@ -595,11 +619,11 @@ const Documents = () => {
 
         <Card className="shadow-sm border-border">
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-xl">Documents</CardTitle>
+            <CardTitle className="text-xl">Active Employee Documents</CardTitle>
             <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search"
+                placeholder="Search active employees..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 rounded-full"
@@ -954,6 +978,198 @@ const Documents = () => {
                               <FileText className="h-3 w-3 mr-1" />
                               Upload
                             </Button>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {new Date(doc.date).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Former Employee Documents Section */}
+        <Card className="shadow-sm border-border">
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle className="text-xl">Former Employee Documents</CardTitle>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search former employees..."
+                value={formerSearchTerm}
+                onChange={(e) => setFormerSearchTerm(e.target.value)}
+                className="pl-9 rounded-full"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="px-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-600 text-white">
+                  <tr>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Employee Name
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Employee ID
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Personal Data Sheet
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Service Records
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">
+                      Certificate of Employment
+                    </th>
+                    <th className="py-3 px-4 text-left font-medium">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        Loading documents...
+                      </td>
+                    </tr>
+                  ) : filteredFormerDocs.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
+                        No former employee documents found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFormerDocs.map((doc, idx) => (
+                      <tr
+                        key={doc.id || idx}
+                        className={idx % 2 === 0 ? "bg-gray-100" : "bg-white"}
+                      >
+                        <td className="py-3 px-4 font-medium text-foreground">
+                          {doc.name || "N/A"}
+                        </td>
+                        <td className="py-3 px-4">{doc.employeeId || "N/A"}</td>
+                        <td className="py-3 px-4">
+                          {doc.pds ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  if (!doc.pds) return;
+                                  const isBase64 = doc.pds.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    fileUrl = doc.pds;
+                                  } else if (doc.pds.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.pds}`;
+                                  } else if (doc.pds.startsWith('http')) {
+                                    fileUrl = doc.pds;
+                                  } else if (doc.employeeId) {
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/pds`;
+                                  } else {
+                                    return;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Personal Data Sheet - ${doc.employeeId}`,
+                                    type: "pds",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No file</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {doc.sr ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  if (!doc.sr) return;
+                                  const isBase64 = doc.sr.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    fileUrl = doc.sr;
+                                  } else if (doc.sr.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.sr}`;
+                                  } else if (doc.sr.startsWith('http')) {
+                                    fileUrl = doc.sr;
+                                  } else if (doc.employeeId) {
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/sr`;
+                                  } else {
+                                    return;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Service Record - ${doc.employeeId}`,
+                                    type: "sr",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No file</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {doc.coe ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-blue-600 hover:text-blue-700 hover:underline h-auto p-1"
+                                onClick={() => {
+                                  if (!doc.coe) return;
+                                  const isBase64 = doc.coe.startsWith('data:');
+                                  let fileUrl: string;
+                                  if (isBase64) {
+                                    fileUrl = doc.coe;
+                                  } else if (doc.coe.startsWith('/uploads/')) {
+                                    fileUrl = `${API_BASE_URL}${doc.coe}`;
+                                  } else if (doc.coe.startsWith('http')) {
+                                    fileUrl = doc.coe;
+                                  } else if (doc.employeeId) {
+                                    fileUrl = `${API_BASE_URL}/documents/file/${doc.employeeId}/coe`;
+                                  } else {
+                                    return;
+                                  }
+                                  setViewingDoc({
+                                    url: fileUrl,
+                                    title: `Certificate of Employment - ${doc.employeeId}`,
+                                    type: "coe",
+                                    isBase64: isBase64,
+                                  });
+                                  setShowViewDocDialog(true);
+                                }}
+                              >
+                                View
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">No file</span>
                           )}
                         </td>
                         <td className="py-3 px-4">

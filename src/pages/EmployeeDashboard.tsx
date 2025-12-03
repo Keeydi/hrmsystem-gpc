@@ -231,6 +231,17 @@ const EmployeeDashboard = () => {
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
+    // Helper to format time to HH:MM (strip seconds if present)
+    const formatTimeHHMM = (timeStr: string): string => {
+      if (!timeStr) return time;
+      // Handle HH:MM:SS format
+      const parts = timeStr.split(":");
+      if (parts.length >= 2) {
+        return `${parts[0].padStart(2, "0")}:${parts[1].padStart(2, "0")}`;
+      }
+      return timeStr;
+    };
+
     try {
       const attendanceData: any = {
         employeeId: user.employeeId,
@@ -245,11 +256,10 @@ const EmployeeDashboard = () => {
       } else {
         attendanceData.checkOut = time;
         attendanceData.checkOutImage = image;
-      }
-
-      // If already has check-in, update; otherwise create new
-      if (todayAttendance.checkIn && type === "checkOut") {
-        attendanceData.checkIn = todayAttendance.checkIn;
+        // Include existing checkIn time (formatted to HH:MM) for the update
+        if (todayAttendance.checkIn) {
+          attendanceData.checkIn = formatTimeHHMM(todayAttendance.checkIn);
+        }
       }
 
       const response = await fetch(`${API_BASE_URL}/attendance`, {
